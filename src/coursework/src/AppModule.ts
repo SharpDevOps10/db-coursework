@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
+import { MediaRequestModule } from './media-request/MediaRequestModule';
 @Module({
-  imports: [],
-  controllers: [],
-  providers: [],
+  imports: [MediaRequestModule],
 })
 export class AppModule {}
