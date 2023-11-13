@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/PrismaService';
 import { MediaRequestResponse } from './MediaRequestResponse';
 import { CreateMediaRequestDto } from './CreateMediaRequestDto';
-import { UpdateMediaRequestDto } from './UpdateMediaRequest';
+import { UpdateMediaRequestDto } from './UpdateMediaRequestDto';
 
 @Injectable()
 export class MediaRequestService {

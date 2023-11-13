@@ -350,3 +350,675 @@ COMMIT;
 ```
 
 ## RESTfull сервіс для управління даними
+
+### Файл-схема бази даних
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  firstName     String         @map("first_name")
+  lastName      String         @map("last_name")
+  username      String         @unique
+  email         String         @unique
+  password      String
+  role          Role           @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId        Int            @map("role_id")
+  actions       Action[]
+  feedbacks     Feedback[]
+  mediaRequests MediaRequest[]
+
+  @@map("users")
+}
+
+enum RoleName {
+  USER
+  TECHNICAL_EXPERT
+}
+
+model Role {
+  id          Int                 @id @default(autoincrement())
+  name        RoleName
+  description String?
+  users       User[]
+  permissions RoleHasPermission[]
+
+  @@map("roles")
+}
+
+model RoleHasPermission {
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId       Int        @map("role_id")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  permissionId Int        @map("permission_id")
+
+  @@id([roleId, permissionId])
+  @@map("role_has_permission")
+}
+
+model Permission {
+  id    Int                 @id @default(autoincrement())
+  name  String
+  roles RoleHasPermission[]
+
+  @@map("permissions")
+}
+
+model Feedback {
+  id             Int          @id @default(autoincrement())
+  body           String
+  rating         Float
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         Int          @map("user_id")
+  mediaRequest   MediaRequest @relation(fields: [mediaRequestId], references: [id], onDelete: Cascade)
+  mediaRequestId Int          @map("media_request)id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@map("feedbacks")
+}
+
+model MediaRequest {
+  id          Int        @id @default(autoincrement())
+  name        String
+  description String?
+  keywords    String?
+  type        String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int        @map("user_id")
+  feedbacks   Feedback[]
+  sources     BasedOn[]
+  actions     Action[]
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@map("media_requests")
+}
+
+model BasedOn {
+  source         Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId       Int          @map("source_id")
+  mediaRequest   MediaRequest @relation(fields: [mediaRequestId], references: [id], onDelete: Cascade)
+  mediaRequestId Int          @map("media_request_id")
+
+  @@id([sourceId, mediaRequestId])
+  @@map("based_on")
+}
+
+model Source {
+  id            Int       @id @default(autoincrement())
+  name          String
+  url           String
+  mediaRequests BasedOn[]
+  labels        Label[]
+  actions       Action[]
+
+  @@map("sources")
+}
+
+model Label {
+  source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId Int    @map("source_id")
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId    Int    @map("tag_id")
+
+  @@id([sourceId, tagId])
+  @@map("labels")
+}
+
+enum TagName {
+  SPORT
+  SCIENCE_AND_TECHOLOGY
+  ENTERTAINMENT
+  FASHION_AND_STYLE
+  MUSIC
+  FOOD_AND_COOKING
+  TOURISM
+  MOVIES_AND_TELEVISION
+}
+
+model Tag {
+  id     Int     @id @default(autoincrement())
+  name   TagName
+  labels Label[]
+
+  @@map("tags")
+}
+
+model Action {
+  mediaRequest   MediaRequest @relation(fields: [mediaRequestId], references: [id], onDelete: Cascade)
+  mediaRequestId Int          @map("media_request_id")
+  source         Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId       Int          @map("source_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         Int          @map("user_id")
+  state          State        @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  stateId        Int          @map("state_id")
+
+  @@id([mediaRequestId, sourceId, userId, stateId])
+  @@map("actions")
+}
+
+enum StateName {
+  SUBSCRIBE
+  UNSUBSCRIBE
+  QUARANTINE
+}
+
+model State {
+  id          Int       @id @default(autoincrement())
+  displayName StateName @map("display_name")
+  actions     Action[]
+
+  @@map("states")
+}
+```
+### Сервіс підключення до бази даних
+
+```ts
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  async onModuleInit () {
+    await this.$connect();
+  }
+
+  async onModuleDestroy () {
+    await this.$disconnect();
+  }
+}
+```
+
+### Модуль підключення до бази даних
+
+```ts
+import { Global, Module } from '@nestjs/common';
+import { PrismaService } from './PrismaService';
+
+@Global()
+@Module({
+  providers: [PrismaService],
+  exports: [PrismaService],
+})
+export class PrismaModule {}
+```
+
+### Модуль для обробки запитів
+
+```ts
+import { Module } from '@nestjs/common';
+import { MediaRequestController } from './MediaRequestController';
+import { MediaRequestService } from './MediaRequestService';
+import { PrismaModule } from '../prisma/PrismaModule';
+
+@Module({
+  controllers: [MediaRequestController],
+  providers: [MediaRequestService],
+  imports: [PrismaModule],
+})
+export class MediaRequestModule {}
+```
+
+### Контролер для обробки запитів
+
+```ts
+import { Body, Controller, Get, Param, Post, ParseIntPipe, Patch, Delete } from '@nestjs/common';
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { MediaRequestService } from './MediaRequestService';
+import { MediaRequestResponse } from './MediaRequestResponse';
+import { CreateMediaRequestDto } from './CreateMediaRequestDto';
+import { UpdateMediaRequestDto } from './UpdateMediaRequest';
+import { UserValidationPipe } from '../utils/UserValidationPipe';
+import { MediaRequestValidationPipe } from '../utils/MediaRequestValidationPipe';
+
+@ApiTags('MediaRequest')
+@Controller('/mediarequest')
+export class MediaRequestController {
+  constructor (private mediaRequestService: MediaRequestService) {}
+
+  @ApiOkResponse({
+    type: MediaRequestResponse,
+  })
+  @ApiBadRequestResponse({
+    description: `\n
+    InvalidBodyException:
+      User id cannot be empty
+      Name is too short (min: 2)
+      Name is too long (max: 150)
+      Name cannot be empty
+      Type cannot be empty
+      Type must be a string
+      Keywords must be a string
+      Description must be a string
+      Description is too long (max: 2000)
+    
+    InvalidEntityIdException:
+      User with such id was not found`,
+  })
+  @ApiOperation({
+    summary: 'Create a new media request',
+  })
+  @Post()
+  async create (@Body(UserValidationPipe) data: CreateMediaRequestDto) {
+    return this.mediaRequestService.createMediaRequest(data);
+  }
+
+  @ApiOkResponse({
+    type: MediaRequestResponse,
+  })
+  @ApiBadRequestResponse({
+    description: `\n
+    InvalidEntityIdException:
+      Media request with such id was not found`,
+  })
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    required: true,
+    description: 'Id of media request that you want to get',
+  })
+  @ApiOperation({
+    summary: 'Get media request by its id',
+  })
+  @Get('/:id')
+  async getMediaResponse (@Param('id', ParseIntPipe, MediaRequestValidationPipe) id: number) {
+    return this.mediaRequestService.getMediaRequest(id);
+  }
+
+  @ApiOkResponse({
+    type: MediaRequestResponse,
+  })
+  @ApiBadRequestResponse({
+    description: `\n
+    InvalidBodyException:
+      Name is too short (min: 2)
+      Name is too long (max: 150)
+      Type must be a string
+      Keywords must be a string
+      Description must be a string
+      Description is too long (max: 2000)
+    
+    InvalidEntityIdException:
+      Media request with such id was not found`,
+  })
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    required: true,
+    description: 'Id of media request that you want to update',
+  })
+  @ApiOperation({
+    summary: 'Update media request by its id',
+  })
+  @Patch('/:id')
+  async update (
+    @Param('id', ParseIntPipe, MediaRequestValidationPipe) id: number,
+    @Body() data: UpdateMediaRequestDto,
+  ) {
+    return this.mediaRequestService.updateMediaRequest(id, data);
+  }
+
+  @ApiOkResponse({
+    type: MediaRequestResponse,
+  })
+  @ApiBadRequestResponse({
+    description: `\n
+    InvalidEntityIdException:
+      Media request with such id was not found`,
+  })
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    required: true,
+    description: 'Id of media request that you want to delete',
+  })
+  @ApiOperation({
+    summary: 'Delete media request by its id',
+  })
+  @Delete('/:id')
+  async deleteMediaRequest (
+    @Param('id', ParseIntPipe, MediaRequestValidationPipe) id: number
+  ) {
+    return this.mediaRequestService.deleteMediaRequest(id);
+  }
+}
+```
+
+### Сервіс для обробки запитів
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/PrismaService';
+import { MediaRequestResponse } from './MediaRequestResponse';
+import { CreateMediaRequestDto } from './CreateMediaRequestDto';
+import { UpdateMediaRequestDto } from './UpdateMediaRequest';
+
+@Injectable()
+export class MediaRequestService {
+  constructor (private prismaService: PrismaService) {}
+
+  async createMediaRequest (data: CreateMediaRequestDto): Promise<MediaRequestResponse> {
+    return this.prismaService.mediaRequest.create({
+      data,
+    });
+  }
+
+  async getMediaRequest (id: number): Promise<MediaRequestResponse> {
+    return this.prismaService.mediaRequest.findUnique({
+      where: {
+        id,
+      },
+    });
+  }
+
+  async updateMediaRequest (id: number, data: UpdateMediaRequestDto): Promise<MediaRequestResponse> {
+    return this.prismaService.mediaRequest.update({
+      where: {
+        id,
+      },
+      data,
+    });
+  }
+
+  async deleteMediaRequest (id: number): Promise<MediaRequestResponse> {
+    return this.prismaService.mediaRequest.delete({
+      where: {
+        id,
+      },
+    });
+  }
+}
+```
+
+### Dto для створення медіа-контенту
+
+```ts
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { validationOptionsMsg } from '../utils/ValidationOptionsMsg';
+
+
+export class CreateMediaRequestDto {
+  @ApiProperty({
+    description: 'Name of the media request',
+  })
+  @MinLength(2, validationOptionsMsg('Name is too short (min: 2)'))
+  @MaxLength(150, validationOptionsMsg('Name is too long (max: 150)'))
+  @IsNotEmpty(validationOptionsMsg('Name cannot be empty'))
+    name: string;
+
+  @ApiPropertyOptional({
+    description: 'The description of the media request',
+  })
+  @IsOptional()
+  @MaxLength(2000, validationOptionsMsg('Description is too long (max: 2000)'))
+  @IsString(validationOptionsMsg('Description must be a string'))
+    description?: string;
+
+  @ApiPropertyOptional({
+    description: 'The keywords of the media request',
+  })
+  @IsOptional()
+  @IsString(validationOptionsMsg('Keywords must be a string'))
+    keywords?: string;
+
+  @ApiProperty({
+    description: 'Type of the media request',
+  })
+  @IsString(validationOptionsMsg('Type must be a string'))
+  @IsNotEmpty(validationOptionsMsg('Type cannot be empty'))
+    type: string;
+
+  @ApiProperty({
+    description: 'Id of the user',
+  })
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  @IsNotEmpty(validationOptionsMsg('Id of the user cannot be empty'))
+    userId: number;
+}
+```
+
+### Dto для оновлення медіа-контенту
+
+```ts
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { validationOptionsMsg } from '../utils/ValidationOptionsMsg';
+
+export class UpdateMediaRequestDto {
+  @ApiPropertyOptional({
+    description: 'Name of the updated media request',
+  })
+  @IsString()
+  @MinLength(2, validationOptionsMsg('Name is too short (min: 2)'))
+  @MaxLength(150, validationOptionsMsg('Name is too long (max: 150)'))
+  @IsOptional()
+    name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Description of the updated media request',
+  })
+  @IsString(validationOptionsMsg('Description must be a string'))
+  @MaxLength(2000, validationOptionsMsg('Description is too long (max: 2000)'))
+  @IsOptional()
+    description?: string;
+
+  @ApiPropertyOptional({
+    description: 'Keywords of the updated media request',
+  })
+  @IsOptional()
+  @IsString(validationOptionsMsg('Keywords must be a string'))
+    keywords?: string;
+
+  @ApiPropertyOptional({
+    description: 'Type of the updated media request',
+  })
+  @IsOptional()
+  @IsString(validationOptionsMsg('Type must be a string'))
+    type?: string;
+}
+```
+
+### Відповідь для медіа-контенту
+
+```ts
+import { ApiProperty } from '@nestjs/swagger';
+
+export class MediaRequestResponse {
+  @ApiProperty({
+    description: 'The id of the media request',
+  })
+    id: number;
+
+  @ApiProperty({
+    description: 'The name of the media request',
+  })
+    name: string;
+
+  @ApiProperty({
+    description: 'Additional information about the media request',
+  })
+    description: string;
+
+  @ApiProperty({
+    description: 'Keywords about the media request',
+  })
+    keywords: string;
+
+  @ApiProperty({
+    description: 'The type of the media request',
+  })
+    type: string;
+
+  @ApiProperty({
+    description: 'The id of the user',
+  })
+    userId: number;
+
+  @ApiProperty({
+    description: 'The date, when the media request was create',
+  })
+    createdAt: Date;
+
+  @ApiProperty({
+    description: 'The date, when the media request was updated',
+  })
+    updatedAt: Date;
+}
+```
+
+### Виключна ситуація: "Сутність не знайдена за її ідентифікатором"
+
+```ts
+import { HttpException, HttpStatus } from '@nestjs/common';
+
+export class InvalidEntityIdException extends HttpException {
+  constructor (entity: string) {
+    super(`${entity} with such id was not found`, HttpStatus.BAD_REQUEST);
+  }
+}
+```
+
+### Validation pipes для користувача
+
+```ts
+import { Injectable, PipeTransform } from '@nestjs/common';
+import { PrismaService } from '../prisma/PrismaService';
+import { InvalidEntityIdException } from './InvalidEntityIdException';
+import { CreateMediaRequestDto } from '../media-request/CreateMediaRequestDto';
+
+@Injectable()
+export class UserValidationPipe implements PipeTransform {
+  constructor (private prismaService: PrismaService) {}
+
+  async transform (data: CreateMediaRequestDto) {
+    const user = await this.prismaService.user.findUnique({
+      where: {
+        id: data.userId,
+      },
+    });
+    if (!user) throw new InvalidEntityIdException('User');
+    return data;
+  }
+}
+```
+
+### Validation pipes для медіа-контенту
+
+```ts
+import { Injectable, PipeTransform } from '@nestjs/common';
+import { PrismaService } from '../prisma/PrismaService';
+import { InvalidEntityIdException } from './InvalidEntityIdException';
+
+@Injectable()
+export class MediaRequestValidationPipe implements PipeTransform {
+  constructor (private prismaService: PrismaService) {}
+
+  async transform (id: number) {
+    const mediaRequest = await this.prismaService.mediaRequest.findUnique({
+      where: {
+        id,
+      },
+    });
+    if (!mediaRequest) throw new InvalidEntityIdException('MediaRequest');
+    return id;
+  }
+}
+```
+
+### Функція для повідомлення про помилку для декораторів
+
+```ts
+import { ValidationOptions } from 'class-validator';
+
+export function validationOptionsMsg (message:string): ValidationOptions {
+  return { message };
+}
+```
+
+### Головний модуль RestApi
+
+```ts
+import { Module } from '@nestjs/common';
+import { MediaRequestModule } from './media-request/MediaRequestModule';
+@Module({
+  imports: [MediaRequestModule],
+})
+export class AppModule {}
+
+```
+
+### Точка входу RestApi (main.ts)
+
+```ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './AppModule';
+import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+
+async function bootstrap () {
+  const app = await NestFactory.create(AppModule);
+  const port = 3000;
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+    })
+  );
+
+  const config = new DocumentBuilder()
+    .setTitle('Media Request API')
+    .setDescription('Here is Media Request API documentation')
+    .setVersion('2.0.4')
+    .addTag('api')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
+  await app.listen(port);
+  console.info(`Started server on 127.0.0.1:${port}`);
+}
+bootstrap();
+```
+
+## Документація з використанням Swagger
+
+### POST-запит 
+
+<p align="center">
+    <img src="./photos/img.png" alt="">
+    <br><br>
+    <img src="./photos/img_1.png" alt="">
+</p>
+
+### GET-запит 
+
+<p align="center">
+    <img src="./photos/img_2.png" alt="">
+</p>
+
+### PATCH-запит 
+
+<p align="center">
+    <img src="./photos/img_3.png" alt="">
+    <br><br>
+    <img src="./photos/img_4.png" alt="">
+</p>
+
+### DELETE-запит 
+
+<p align="center">
+    <img src="./photos/img_5.png" alt="">
+</p>

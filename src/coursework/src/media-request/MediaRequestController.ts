@@ -3,7 +3,7 @@ import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags }
 import { MediaRequestService } from './MediaRequestService';
 import { MediaRequestResponse } from './MediaRequestResponse';
 import { CreateMediaRequestDto } from './CreateMediaRequestDto';
-import { UpdateMediaRequestDto } from './UpdateMediaRequest';
+import { UpdateMediaRequestDto } from './UpdateMediaRequestDto';
 import { UserValidationPipe } from '../utils/UserValidationPipe';
 import { MediaRequestValidationPipe } from '../utils/MediaRequestValidationPipe';
 
@@ -75,7 +75,6 @@ export class MediaRequestController {
       Description is too long (max: 2000)
     
     InvalidEntityIdException:
-      User with such id was not found
       Media request with such id was not found`,
   })
   @ApiParam({
@@ -90,7 +89,7 @@ export class MediaRequestController {
   @Patch('/:id')
   async update (
     @Param('id', ParseIntPipe, MediaRequestValidationPipe) id: number,
-    @Body(UserValidationPipe) data: UpdateMediaRequestDto,
+    @Body() data: UpdateMediaRequestDto,
   ) {
     return this.mediaRequestService.updateMediaRequest(id, data);
   }
