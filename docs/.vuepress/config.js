@@ -15,7 +15,7 @@ module.exports = {
     }]
   ],
   port: 3030,
-  base: '/db-labs/',
+  base: '/db-coursework /',
   theme: 'cool',
   // dest: 'dist',
   head: [
@@ -76,7 +76,7 @@ module.exports = {
 
     lastUpdated: 'Останнє оновлення', // string | boolean
       // Assumes GitHub. Can also be a full GitLab url.
-    repo: 'https://github.com/fokaaas/db-labs',
+    repo: 'https://github.com/SharpDevOps10/db-coursework',
     // Customising the header label
     // Defaults to "GitHub"/"GitLab"/"Bitbucket" depending on `themeConfig.repo`
     repoLabel: 'Github',
