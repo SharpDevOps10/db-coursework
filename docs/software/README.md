@@ -577,7 +577,7 @@ import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags }
 import { MediaRequestService } from './MediaRequestService';
 import { MediaRequestResponse } from './MediaRequestResponse';
 import { CreateMediaRequestDto } from './CreateMediaRequestDto';
-import { UpdateMediaRequestDto } from './UpdateMediaRequest';
+import { UpdateMediaRequestDto } from './UpdateMediaRequestDto';
 import { UserValidationPipe } from '../utils/UserValidationPipe';
 import { MediaRequestValidationPipe } from '../utils/MediaRequestValidationPipe';
 
@@ -633,6 +633,17 @@ export class MediaRequestController {
   @Get('/:id')
   async getMediaResponse (@Param('id', ParseIntPipe, MediaRequestValidationPipe) id: number) {
     return this.mediaRequestService.getMediaRequest(id);
+  }
+
+  @ApiOkResponse({
+    type: [MediaRequestResponse],
+  })
+  @ApiOperation({
+    summary: 'Get all media requests',
+  })
+  @Get()
+  async getAllMediaRequests () {
+    return this.mediaRequestService.getAllMediaRequests();
   }
 
   @ApiOkResponse({
@@ -719,6 +730,10 @@ export class MediaRequestService {
         id,
       },
     });
+  }
+
+  async getAllMediaRequests (): Promise<MediaRequestResponse[]> {
+    return this.prismaService.mediaRequest.findMany();
   }
 
   async updateMediaRequest (id: number, data: UpdateMediaRequestDto): Promise<MediaRequestResponse> {
@@ -1003,18 +1018,25 @@ bootstrap();
     <img src="./photos/img_1.png" alt="">
 </p>
 
-### GET-запит 
+### GET-запит (отримати за id)
 
 <p align="center">
     <img src="./photos/img_2.png" alt="">
 </p>
+
+### GET-запит (отримати всі)
+
+<p align="center">
+    <img src="./photos/img_6.png" alt="">
+</p>
+
 
 ### PATCH-запит 
 
 <p align="center">
     <img src="./photos/img_3.png" alt="">
     <br><br>
-    <img src="./photos/img_4.png" alt="">
+    <img src="./photos/img_7.png" alt="">
 </p>
 
 ### DELETE-запит 

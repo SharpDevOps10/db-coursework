@@ -22,6 +22,10 @@ export class MediaRequestService {
     });
   }
 
+  async getAllMediaRequests (): Promise<MediaRequestResponse[]> {
+    return this.prismaService.mediaRequest.findMany();
+  }
+
   async updateMediaRequest (id: number, data: UpdateMediaRequestDto): Promise<MediaRequestResponse> {
     return this.prismaService.mediaRequest.update({
       where: {

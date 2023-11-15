@@ -62,6 +62,17 @@ export class MediaRequestController {
   }
 
   @ApiOkResponse({
+    type: [MediaRequestResponse],
+  })
+  @ApiOperation({
+    summary: 'Get all media requests',
+  })
+  @Get()
+  async getAllMediaRequests () {
+    return this.mediaRequestService.getAllMediaRequests();
+  }
+
+  @ApiOkResponse({
     type: MediaRequestResponse,
   })
   @ApiBadRequestResponse({
